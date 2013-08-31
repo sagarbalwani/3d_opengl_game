@@ -1,0 +1,31 @@
+										Assignment 2.2
+
+1. The robot move only in 4 directions.
+
+2. The robot can jump and it jumps in the direction where it is facing.
+
+3. The animations of the hands and legs are clearly visible.
+
+4. The bot rotates it's neck smoothly.
+
+5. Five camera views are implemented.
+
+	a. Static View :- The whole world is visible at once.
+	b. First Person :- The world is seen from the perspective of the robot.
+	c. Tile View :- The world is seen from a tile and the camera can rotate.(controlled by the keys j,l   i,k  o,p)
+	d. Third Person :- The world is seen from the third person perspective.
+	e. Helicoptor view :- The world is seen from a flying camera.(controlled by the keys a,d   w,s  q,e  z,x  c,v)
+
+6. A spot light that follows the person has been implemented.
+
+7. Textures have been added to the tiles and also a floating environment has been provided.
+
+8. Three types of tiles have been implemented.
+
+	a. Static - Remain Static
+	b. Falling - Falls when a person lands on the tile.
+	c. Moving - keeps on moving up and down periodically.
+
+9. Some tiles have stones on them and the bot has to jump from these tiles.
+
+10. Some tiles are missing and the bot has to jump over these tiles to save himself.

@@ -1,0 +1,1033 @@
+#include <iostream>
+#include <cmath>
+#include <GL/glut.h>
+#include<string.h>
+#include<time.h>
+
+#include "enemyrobot.h"
+
+using namespace std;
+
+
+#define PI 3.141592653589
+#define DEG2RAD(deg) (deg * PI / 180)
+
+float _windowwidth=0;
+float _windowheight=0;
+
+//coordinates of the camera for the helicopter view... the camera will be initialized at the center of the world initially....
+float _helicamx=0;
+float _helicamy=20;
+float _helicamz=0;
+//looking at the center of the stage or in the direction of the mouse coordinates
+float _helicamlookx=0;
+float _helicamlooky=0;
+float _helicamlookz=0;
+//up is in the -z direction initially and then can be changed 
+float _helicamupx=0;
+float _helicamupy=0;
+float _helicamupz=-1;
+int _mouseflag=0;
+
+
+int _tilei=9;
+int _tilej=0;
+float _tileangle=270;
+
+int _cameraview=0;// 0=tower view, 1=First person view, 2=Static View, 3=Third person view, 4=helicoptor view,
+float _camangle3=90;//camera angle for third person view...
+
+float _howfar=20;//tells how far is the camera behind the robot in third person view
+
+// Function Declarations
+void drawScene();
+void update(int value);
+void drawBox(float len);
+void initRendering();
+void handleResize(int w, int h);
+void handleKeypress1(unsigned char key, int x, int y);
+void handleKeypress2(int key, int x, int y);
+void handleMouseclick(int button, int state, int x, int y);
+void jump(int value);
+
+void drawhuman(int);
+
+void fungaze(int x,int y);
+
+void GetOGLPos(int x, int y,double *a,double *b,double *c);
+
+void scroll(int button,int b,int c,int d);
+
+
+int main(int argc, char **argv) {
+	srand(time(NULL));
+	generateblocks(robo);
+
+	robo._centerx=(blocks[9][0].a.x+blocks[9][0].b.x)/2;//-45
+	robo._centery=0;
+	robo._centerz=(blocks[9][0].a.z+blocks[9][0].d.z)/2;//45
+	
+	enemyrobo1._centerx=(blocks[5][0].a.x+blocks[5][0].b.x)/2;//45135;
+	enemyrobo2._centerx=(blocks[5][9].a.x+blocks[5][9].b.x)/2;//45-45;
+	
+	enemyrobo1._centerz=(blocks[5][0].a.z+blocks[5][0].d.z)/2;//45-45;
+	enemyrobo2._centerz=(blocks[5][9].a.z+blocks[5][9].d.z)/2;//45-45;
+	
+	//enemyrobo2._jincy=15;
+	//enemyrobo1._jincy=15;
+	
+
+	
+	glutInit(&argc, argv);
+	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+	
+	_windowwidth = glutGet(GLUT_SCREEN_WIDTH);
+	_windowheight = glutGet(GLUT_SCREEN_HEIGHT);
+	
+	glutInitWindowSize(_windowwidth, _windowheight);
+	glutInitWindowPosition(0,0);
+	
+	glutCreateWindow("Making of a game :p");  // Setup the window
+	initRendering();
+	
+	// Register callbacks
+	glutDisplayFunc(drawScene);
+	glutIdleFunc(drawScene);
+	glutKeyboardFunc(handleKeypress1);
+	glutSpecialFunc(handleKeypress2);
+	glutMouseFunc(handleMouseclick);
+	glutReshapeFunc(handleResize);
+	glutTimerFunc(10, update, 0);
+	glutPassiveMotionFunc(&fungaze);
+	glutMouseFunc(scroll);
+	moveblocks();
+	updateenemy(0);
+	updateenemy2(0);
+	//glutTimerFunc(10, fallblocks, 0);
+	
+	glutMainLoop();
+	return 0;
+}
+
+void scroll(int button,int state,int c,int d){
+	if(state==GLUT_DOWN){
+		if(button==3){
+			_helicamy--;
+		}
+		else if(button==4){
+			_helicamy++;
+		}
+	}
+}
+
+float pitch=25;//change with z,x up down
+float yaw=245;//change with c,v
+float _helicamanglez=0;//it means it is making angle 0 with the x axis
+float _helicamanglex=0;//it means it is making angle 0 with the z axis, keys u and i will affect these angles.. and with change in this angle the look vector has to change
+float _radius=100;
+void drawScene() {
+	//{{{
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	if(_cameraview==4){//Helicoptor view
+		glTranslatef(-_helicamx,-_helicamy,-_helicamz);
+		glTranslatef(_helicamx,_helicamy,_helicamz);
+		gluLookAt(0,0,0,-(cos(DEG2RAD(pitch)))-cos(DEG2RAD(yaw)),-sin(DEG2RAD(pitch)),-sin(DEG2RAD(yaw)),0,1,0);
+		glTranslatef(-_helicamx,-_helicamy,-_helicamz);
+	}
+	else if(_cameraview==0){//view is static
+		_camangle3=90;
+		gluLookAt(50, 30,260, 50, 0, 10,0.0, 1.0, 0);
+	}
+	else if(_cameraview==1){
+		float lookx,lookz;		
+		lookx=robo._centerx+10*sin((robo._humanangle)*PI/180);
+		lookz=robo._centerz+10*cos((robo._humanangle)*PI/180);
+		gluLookAt(robo._centerx,robo._centery+robo._radface*4 + robo._radface/4 + 2*robo._radface + 6,robo._centerz-robo._radface-robo._radface/5, 
+			lookx, 0.0,lookz,
+			0, 1,0);
+	}
+	else if(_cameraview==2){//tile view
+		if(blocks[_tilei][_tilej].flag==6){
+			gluLookAt(_tilej*10-45,10,_tilei*10-45,
+				_tilei*10-45+1000*cos(DEG2RAD(_tileangle)),10,_tilej*10-45+1000*sin(DEG2RAD(_tileangle)),
+				0, 1,0);
+		}
+		else{
+			gluLookAt(_tilej*10-45,blocks[_tilei][_tilej].a.y+10,_tilei*10-45,
+				_tilei*10-45+1000*cos(DEG2RAD(_tileangle)),blocks[_tilei][_tilej].a.y+10,_tilej*10-45+1000*sin(DEG2RAD(_tileangle)),
+				0, 1,0);
+		}
+	}
+	else if(_cameraview==3){
+		
+		float lookx,lookz;
+		float howx,howz;
+		
+		lookx=robo._centerx+100*sin((robo._humanangle)*PI/180);
+		lookz=robo._centerz+100*cos((robo._humanangle)*PI/180);
+		
+		howx=robo._centerx-_howfar*sin((robo._humanangle)*PI/180);
+		howz=robo._centerz-_howfar*cos((robo._humanangle)*PI/180);
+		
+		gluLookAt(howx,robo._centery+robo._radface*4 + robo._radface/4 + 2*robo._radface + _howfar/3 ,howz, 
+			lookx, 0.0,lookz,
+			0, 1.0,0);
+	}
+	
+	//Add ambient light
+	GLfloat ambientColor[] = {0.2f, 0.2f, 0.2f, 1.0f}; //Color (0.2, 0.2, 0.2)
+	glLightModelfv(GL_LIGHT_MODEL_AMBIENT, ambientColor);
+	
+	
+	
+	//Add positioned light
+	GLfloat lightColor0[] = {255, 255, 255, 1.0f}; //Color (0.5, 0.5, 0.5)
+	GLfloat lightPos0[] = {robo._centerx, 60.0f, robo._centerz, 1.0f}; //Positioned at (4, 0, 8)
+	glLightf(GL_LIGHT0, GL_SPOT_CUTOFF, 10.0);
+	GLfloat spot_direction[] = { 0.0, -1.0, 0.0 };
+	glLightfv(GL_LIGHT0, GL_SPOT_DIRECTION, spot_direction);
+	glLightfv(GL_LIGHT0, GL_DIFFUSE, lightColor0);
+	glLightfv(GL_LIGHT0, GL_POSITION, lightPos0);
+	
+	
+	GLfloat lightColor1[] = {255, 255, 255, 1.0f}; //Color (0.5, 0.5, 0.5)
+	GLfloat lightPos1[] = {0.0,80.0,0.0, 1.0f}; //Positioned at (4, 0, 8)
+	glLightf(GL_LIGHT1, GL_SPOT_CUTOFF, 90.0);
+	GLfloat spot_direction1[] = { 0.0, 0.0, -1.0 };
+	glLightfv(GL_LIGHT1, GL_SPOT_DIRECTION, spot_direction1);
+	glLightfv(GL_LIGHT1, GL_DIFFUSE, lightColor1);
+	glLightfv(GL_LIGHT1, GL_POSITION, lightPos1);
+	
+	glEnable(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, _textureId1);
+	
+	//Bottom
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	
+	glBegin(GL_QUADS);
+	glNormal3f(0,1,0);
+	glTexCoord2f(0.0, 0.0);
+	glVertex3f(-1000,-100,-1000);
+	glTexCoord2f(1, 0.0);
+	glVertex3f(1000,-100,-1000);
+	glTexCoord2f(1, 1);
+	glVertex3f(1000,-100,1000);
+	glTexCoord2f(0, 1);
+	glVertex3f(-1000,-100,1000);
+	glEnd();
+	
+	drawhuman(robo._newdir);
+	drawenemyhuman(&enemyrobo1,enemyrobo1._newdir);
+	drawenemyhuman(&enemyrobo2,enemyrobo2._newdir);
+	
+	drawBlocks();
+	
+	glutSwapBuffers();
+	//}}}
+}
+
+void fungaze(int x,int y){
+	//{{{
+	if(_cameraview==4){//that is the person is the helicoptor view and has opted to look in the direction of the mouse
+		//printf("%d %d\n",x,y);
+		double a;
+		double b;
+		double c;
+		//printf("%d %d\n",x,y);
+		//GetOGLPos(x,y,&a,&b,&c);
+		if(_mouseflag==1){//means that the person has to change the yaw that is the left right looking of the person
+			yaw=(float)x*360.0/_windowwidth;
+		}
+		else if(_mouseflag==2){
+			pitch=(float)y*360.0/_windowheight;
+		}
+		//printf("a=%f b=%f c=%f\n",a,b,c);
+	}
+	//}}}
+}
+
+void GetOGLPos(int x, int y,double *a,double *b,double *c)
+{//{{{
+	GLint viewport[4];
+	GLdouble modelview[16];
+	GLdouble projection[16];
+	GLfloat winX, winY, winZ;
+	GLdouble posX, posY, posZ;
+	
+	glGetDoublev( GL_MODELVIEW_MATRIX, modelview );
+	glGetDoublev( GL_PROJECTION_MATRIX, projection );
+	glGetIntegerv( GL_VIEWPORT, viewport );
+	
+	winX = (float)x;
+	winY = (float)viewport[3] - (float)y;
+	glReadPixels( x, int(winY), 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &winZ );
+	
+	gluUnProject( winX, winY, winZ, modelview, projection, viewport, &posX, &posY, &posZ);
+	
+	*a=posX;
+	*b=posY;
+	*c=posZ;
+	//}}}
+}
+
+void drawsubhuman(float angle){
+	//{{{
+	glPushMatrix();
+	glTranslatef(robo._centerx,robo._centery,robo._centerz);
+	glRotatef(angle,0,1,0);
+	
+	drawFace(robo._radface,0,robo._radface*4 + robo._radface/4 + robo._radface,0);
+	
+	drawNeck(robo._radface,0,robo._radface*4,0);
+	
+	drawStomach2(robo._radface,0,0,0);
+	
+	drawluarm(robo._radface,-robo._radface*1.35,robo._radface*4,0,robo._flaglefthand,robo._handangle);
+	
+	drawruarm(robo._radface,robo._radface*1.35,robo._radface*4,0,robo._flaglefthand,robo._handangle);
+	
+	drawluleg(robo._radface,-robo._radface*1.35,0,0,robo._flagleftleg,robo._legangle);
+	
+	drawruleg(robo._radface,robo._radface*1.35,0,0,robo._flagleftleg,robo._legangle);
+	
+	glPopMatrix();
+	//}}}
+}
+
+
+int _flagrot=0;
+
+void rotatehead(int value){
+	//{{{ 
+	if(robo.nooftimesrotate==robo._precision){
+		robo.nooftimesrotate=0;
+		//printf("yes\n");
+		robo._blocktillrotate=0;
+	}
+	else{
+		robo.rotatehead();
+		glutTimerFunc(25,rotatehead,0);
+	} //}}}
+	
+}
+
+void drawhuman(int dir){
+	//{{{ 
+	if(dir!=robo._curdir){
+		robo._blocktillrotate=1;
+		robo._angleofrot=getangle(&robo._curdir,robo._curdir,dir);
+		glutTimerFunc(10,rotatehead,0);
+		//robo._humanangle+=robo._angleofrot;
+	}
+	if(robo._humanangle>=360){
+		robo._humanangle-=360;
+	}
+	else if(robo._humanangle<0){
+		robo._humanangle+=360;
+	}
+	drawsubhuman(robo._humanangle);
+	//}}}
+}
+
+
+//this part from here deals with lines the robot motions and collision detections
+//find bot is going to be the most important functions now... :) going to replace
+//where is bot.. :)
+
+void iftrampoline(){
+	int _oti=-1,_otj=-1;
+	int i,j;
+	int yes=0;
+	int flag=0;//it does nothing as of now
+	for(i=0;i<10;i++){
+		for(j=0;j<10;j++){
+			yes=tellme(blocks[i][j].a,blocks[i][j].b,blocks[i][j].c,blocks[i][j].d,robo._centerx,robo._centerz);
+			if(yes==1){
+				_oti=i;
+				_otj=j;
+				break;
+			}
+		}
+		if(yes==1){
+			break;
+		}
+	}
+	if(_oti==-1 or _otj==-1);
+	else{
+		int k;
+		if(flag==0){
+			//printf("till here is correct\n");
+			printf("%f %f\n",robo._centery-4*robo._radface,blocks[_oti][_otj].a.y);
+			for(k=0;k<_nooftrampoline;k++){
+				if(_trampolineblocks[2*k]==_oti && _trampolineblocks[2*k+1]==_otj && robo._centery-4*robo._radface==blocks[_oti][_otj].a.y){//(robo._centery-4*robo._radface>blocks[_oti][_otj].a.y-0.001 && robo._centery-4*robo._radface<blocks[_oti][_otj].a.y+0.001)){
+					printf("this is the second check point\n");
+					robo._jincxz=20.0;
+					robo._jincy=16.0;					
+					robo._icanjump=0;
+					jump(0);
+				}
+			}
+		}
+	}
+}
+
+int _oti=0,_otj=9;//on i,j tile... -1 tells that it's on no tile..
+
+void findbot(float a,float b,float c,float d,float e,float f,int *nooftimes,int flag){//this function is for motion of the bot
+	int i,j;
+	//a,b,c tells the initial location of the bot
+	//d,e,f tells the final location of the bot
+	int yes=0;
+	_oti=-1;
+	_otj=-1;
+	for(i=0;i<10;i++){
+		for(j=0;j<10;j++){
+			yes=tellme(blocks[i][j].a,blocks[i][j].b,blocks[i][j].c,blocks[i][j].d,d,f);
+			if(yes==1){
+				_oti=i;
+				_otj=j;
+				break;
+			}
+		}
+		if(yes==1){
+			break;
+		}
+	}
+	if(_oti==-1 or _otj==-1)printf("yes i am on a wrong tile\n");
+	else{
+		//printf("yes %f %f %f %d\n",robo._centery-4*robo._radface,blocks[i][j].a.y,blocks[i][j].e.y,robo.noofjumps);
+		if(e-robo._radface*4>=blocks[_oti][_otj].a.y){//this condition will see if the bot is at an allowed positon
+			//precisely legs above the tiles directly above a tile ... :) 
+			
+		}
+		else if(e + robo._radface*4 + robo._radface/4 + 2*robo._radface < blocks[_oti][_otj].e.y){//if head below the tile
+		}
+		else{//this means that the robot is going to access a wrong location that it is not supposed to so donot allow it do so....
+			//printf("yes i have gone in else and should not go here...\n");
+			if(flag==1){
+				robo._centerx=a+2*robo._inc/robo._precision;
+				robo._centery=b;
+			}
+			else if(flag==2){
+				robo._centerx=a-2*robo._inc/robo._precision;
+				robo._centery=b;
+			}
+			else if(flag==3){
+				robo._centerz=c+2*robo._inc/robo._precision;
+				robo._centery=b;
+			}
+			else if(flag==4){
+				robo._centerz=c-2*robo._inc/robo._precision;
+				robo._centery=b;
+			}
+			else if(flag==0){
+				robo._centerx=a;
+				robo._centery=b;
+				robo._centerz=c;
+			}
+			yes=0;
+			d=robo._centerx;
+			e=robo._centery;
+			f=robo._centerz;
+			for(i=0;i<10;i++){
+				for(j=0;j<10;j++){
+					yes=tellme(blocks[i][j].a,blocks[i][j].b,blocks[i][j].c,blocks[i][j].d,d,f);
+					if(yes==1){
+						_oti=i;
+						_otj=j;
+						break;
+					}
+				}
+				if(yes==1){
+					break;
+				}
+			}
+			*nooftimes=robo._precision;
+			
+		}
+	}
+}
+
+void findbotupdate(float d,float e,float f,int *g,int *h){//this function is for motion of the bot
+	int i,j;
+	*g=-1;
+	*h=-1;
+	//d,e,f tells the final location of the bot
+	int yes=0;
+	for(i=0;i<10;i++){
+		for(j=0;j<10;j++){
+			yes=tellme(blocks[i][j].a,blocks[i][j].b,blocks[i][j].c,blocks[i][j].d,d,f);
+			if(yes==1){
+				*g=i;
+				*h=j;
+				break;
+			}
+		}
+		if(yes==1){
+			break;
+		}
+	}
+}
+
+
+int _flagleft=0,_flagright=0,_flagup=0,_flagdown=0;
+
+int _howmanytimescanigoinaparticulardirection=10;
+
+void goleft(int value){
+	float a,b,c,d,e,f;//they store the initial and final coordinates of the robot
+	if(robo.nooftimesleft==robo._precision){
+		robo.nooftimesleft=0;
+		_flagleft--;
+	}
+	else{
+		a=robo._centerx;
+		b=robo._centery;
+		c=robo._centerz;
+		robo.goleft(0);
+		d=robo._centerx;
+		e=robo._centery;
+		f=robo._centerz;		
+		findbot(a,b,c,d,e,f,&robo.nooftimesleft,1);
+		glutTimerFunc(50,goleft,0);
+	}
+}
+
+void goright(int value){
+	float a,b,c,d,e,f;//they store the initial and final coordinates of the robot
+	
+	if(robo.nooftimesright==robo._precision){
+		robo.nooftimesright=0;
+		_flagright--;
+	}
+	else{
+		a=robo._centerx;
+		b=robo._centery;
+		c=robo._centerz;
+		robo.goright(0);
+		d=robo._centerx;
+		e=robo._centery;
+		f=robo._centerz;		
+		findbot(a,b,c,d,e,f,&robo.nooftimesright,2);
+		glutTimerFunc(50,goright,0);
+	}
+}
+
+void goup(int value){
+	float a,b,c,d,e,f;//they store the initial and final coordinates of the robot
+	
+	if(robo.nooftimesup==robo._precision){
+		robo.nooftimesup=0;
+		_flagup--;
+	}
+	else{
+		a=robo._centerx;
+		b=robo._centery;
+		c=robo._centerz;
+		robo.goup(0);
+		d=robo._centerx;
+		e=robo._centery;
+		f=robo._centerz;		
+		findbot(a,b,c,d,e,f,&robo.nooftimesup,3);
+		glutTimerFunc(50,goup,0);
+	}
+}
+
+void godown(int value){
+	float a,b,c,d,e,f;//they store the initial and final coordinates of the robot
+	
+	if(robo.nooftimesdown==robo._precision){
+		robo.nooftimesdown=0;
+		_flagdown--;
+	}
+	else{
+		a=robo._centerx;
+		b=robo._centery;
+		c=robo._centerz;
+		robo.godown(0);
+		d=robo._centerx;
+		e=robo._centery;
+		f=robo._centerz;		
+		findbot(a,b,c,d,e,f,&robo.nooftimesdown,4);
+		glutTimerFunc(50,godown,0);
+	}
+}
+
+void handleKeypress2(int key, int x, int y) {
+	if(robo._blocktillrotate==0){
+		if (key == GLUT_KEY_LEFT){
+			if(_flagleft>_howmanytimescanigoinaparticulardirection){}
+			else{
+				if(_cameraview==3 || _cameraview==1){
+					if(robo._curdir==1){
+						robo._newdir=4;
+					}
+					else if(robo._curdir==2){
+						robo._newdir=3;
+					}
+					else if(robo._curdir==3){
+						robo._newdir=1;
+					}
+					else if(robo._curdir==4){
+						robo._newdir=2;
+					}
+				}
+				else{
+					robo._newdir=2;
+					_flagleft++;
+					goleft(0);
+				}
+			}
+		}
+		else if (key == GLUT_KEY_RIGHT){
+			if(_flagright>_howmanytimescanigoinaparticulardirection){}
+			else{
+				if(_cameraview==3 || _cameraview==1){
+					if(robo._curdir==1){
+						robo._newdir=3;
+					}
+					else if(robo._curdir==2){
+						robo._newdir=4;
+					}
+					else if(robo._curdir==3){
+						robo._newdir=2;
+					}
+					else if(robo._curdir==4){
+						robo._newdir=1;
+					}
+				}
+				else{
+					robo._newdir=1;
+					_flagright++;
+					goright(0);
+				}
+			}
+		}
+		else if (key == GLUT_KEY_UP){
+			if(_flagup>_howmanytimescanigoinaparticulardirection){}
+			else{
+				if(_cameraview==3 || _cameraview==1){
+					if(robo._curdir==1){
+						if(_flagright<1+_howmanytimescanigoinaparticulardirection){
+							goright(0);
+							_flagright++;
+						}
+					}
+					else if(robo._curdir==2){
+						if(_flagleft<1+_howmanytimescanigoinaparticulardirection){
+							goleft(0);
+							_flagleft++;
+						}
+					}
+					else if(robo._curdir==3){
+						if(_flagdown<1+_howmanytimescanigoinaparticulardirection){
+							godown(0);
+							_flagdown++;
+						}
+					}
+					else if(robo._curdir==4){
+						if(_flagup<1+_howmanytimescanigoinaparticulardirection){
+							goup(0);
+							_flagup++;
+						}
+					}
+				}
+				else{
+					robo._newdir=4;
+					goup(0);
+					_flagup++;
+				}
+			}
+		}
+		else if (key == GLUT_KEY_DOWN){
+			if(_flagdown>_howmanytimescanigoinaparticulardirection){}
+			else{
+				if(_cameraview==3 || _cameraview==1){
+					if(robo._curdir==1){
+						robo._newdir=2;
+					}
+					else if(robo._curdir==2){
+						robo._newdir=1;
+					}
+					else if(robo._curdir==3){
+						robo._newdir=4;
+					}
+					else if(robo._curdir==4){
+						robo._newdir=3;
+					}
+				}
+				else{
+					robo._newdir=3;
+					godown(0);
+					_flagdown++;
+				}
+			}
+		}
+	}
+}
+
+void jump(int value){
+	int a,b,c,d,e,f;
+	if(robo.noofjumps==robo._precision){
+		robo.noofjumps=0;
+		iftrampoline();
+		//printf("yes jumping done\n");
+	}
+	else{
+		a=robo._centerx;
+		b=robo._centery;
+		c=robo._centerz;
+		robo.jump(0);
+		d=robo._centerx;
+		e=robo._centery;
+		f=robo._centerz;
+		findbot(a,b,c,d,e,f,&robo.noofjumps,0);	
+		glutTimerFunc(50,jump,0);
+	}
+}
+
+void handleKeypress1(unsigned char key, int x, int y) {
+	
+	if (key == 27) {
+		exit(0);     // escape key is pressed
+	}
+	else if(key=='n'){//changes the camera view
+		_cameraview=(_cameraview+1)%5;
+	}
+	else if(key==' '){
+		//printf("%d %d\n",robo.noofjumps,robo._icanjump);
+		if(robo.noofjumps==0 &&  robo._icanjump==1){
+			//printf("%d %d\n",robo.noofjumps,robo._icanjump);
+			robo._jincxz=15.0;
+			robo._jincy=15.0;					
+			robo._icanjump=0;
+			jump(0);
+		}
+	}
+	//{{{
+	if(_cameraview==4){
+		//change the x coordinates
+		if(key=='a'){
+			_helicamx--;
+			_helicamlookx--;
+		}
+		else if(key=='d'){
+			_helicamx++;
+			_helicamlookx++;
+		}
+		
+		//change the z direction
+		else if(key=='w'){
+			_helicamz--;
+			_helicamlookz--;
+		}
+		else if(key=='s'){
+			_helicamz++;
+			_helicamlookz++;
+		}
+		
+		//change the y direction
+		else if(key=='q'){
+			_helicamy--;
+			_helicamlooky--;
+		}
+		else if(key=='e'){
+			_helicamy++;
+			_helicamlooky++;
+		}
+		else if(key=='z'){//changes the camera view in clockwise direction
+			if(_cameraview==4){
+				pitch+=5;
+				if(pitch>=360){
+					pitch-=360;
+				}
+			}
+		}
+		else if(key=='x'){//changes the camera view in clockwise direction
+			if(_cameraview==4){
+				pitch-=5;
+				if(pitch<=0){
+					pitch+=360;
+				}
+			}
+		}
+		else if(key=='c'){//changes the camera view in clockwise direction
+			if(_cameraview==4){
+				yaw+=5;
+				if(yaw>=360){
+					yaw-=360;
+				}
+			}
+		}
+		else if(key=='v'){//changes the camera view in clockwise direction
+			if(_cameraview==4){
+				yaw-=5;
+				if(yaw<=0){
+					yaw+=360;
+				}
+			}
+		}
+		else if(key=='m'){
+			_mouseflag=(_mouseflag+1)%3;
+		}
+	}
+	if(_cameraview==2){
+		if(key=='i'){
+			_tileangle=270;
+			if(_tilei>0){
+				_tilei--;
+			}
+		}
+		else if(key=='k'){
+			_tileangle=270;
+			if(_tilei<9){
+				_tilei++;
+			}
+		}
+		else if(key=='j'){
+			_tileangle=270;
+			if(_tilej>0){
+				_tilej--;
+			}
+		}
+		else if(key=='l'){
+			_tileangle=270;
+			if(_tilej<9){
+				_tilej++;
+			}
+		}
+		else if(key=='p'){
+			_tileangle+=5;
+			if(_tileangle>=360){
+				_tileangle-=360;
+			}
+		}
+		else if(key=='o'){
+			_tileangle-=5;
+			if(_tileangle<0){
+				_tileangle+=360;
+			}
+		}
+	}
+	//}}}
+	
+}
+
+void handleMouseclick(int button, int state, int x, int y) {
+	
+	if (state == GLUT_DOWN)
+	{
+		if (button == GLUT_LEFT_BUTTON);
+		else if (button == GLUT_RIGHT_BUTTON);
+	}
+}
+
+// Initializing some openGL 3D rendering options
+void initRendering() {
+	//{{{ 
+	
+	glEnable(GL_DEPTH);        // Enable objects to be drawn ahead/behind one another
+	glEnable(GL_DEPTH_TEST);        // Enable objects to be drawn ahead/behind one another
+	glEnable(GL_COLOR_MATERIAL);    // Enable coloring
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);   // Setting a background color
+	
+	glEnable(GL_LIGHTING); //Enable lighting
+	glEnable(GL_LIGHT0); //Enable light #0
+	glEnable(GL_LIGHT1); //Enable light #1
+	glEnable(GL_NORMALIZE); //Automatically normalize normals
+	glShadeModel(GL_SMOOTH); //Enable smooth shading
+	
+	Image* image = loadBMP("tiletest.bmp");
+	_textureId = loadTexture(image);
+	delete image;
+	
+	Image* image1 = loadBMP("water2.bmp");
+	_textureId1 = loadTexture(image1);
+	delete image1;
+	
+	//}}}
+}
+
+// Function called when the window is resized
+void handleResize(int w, int h) {
+	//{{{
+	glViewport(0, 0, w, h);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluPerspective(45.0f, (float)w / (float)h, 0.1f, 2000.0f);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	//}}}
+}
+
+
+int _checkflag=0;
+float inc=0.5;
+int _diecount=0;//tells that the robot has jumped to low.... :P and now it will die hehe...
+void whereisbot(){
+	robo._icanjump=0;
+	if(_checkflag==1){
+		robo._centery+=inc;
+	}
+	moveblocks1(0);
+	
+	int i,j;
+	findbotupdate(robo._centerx,robo._centery,robo._centerz,&i,&j);
+	int k;
+	//printf("%d %d\n",i,j);
+	if(i==-1 or j==-1){
+		if(robo.noofjumps==0){
+			robo._centery-=robo._jincy/robo._precision;
+		}
+	}
+	else{
+		if(robo.noofjumps==0){
+			
+			//printf("%f %f\n",blocks[i][j].a.y+robo._radface*4,robo._centery);
+			
+			if((blocks[i][j].a.y+robo._radface*4)==robo._centery){
+				//printf("why not in this???\n");
+				if(_diecount>20){
+					//_cameraview=3;
+					//drawdeadrobo(robo._centerx,robo._centery,robo._centerz);
+				}
+				robo._icanjump=1;			
+				for(k=0;k<_nooffalling;k++){
+					if(_fallingblocks[2*k]==i && _fallingblocks[2*k+1]==j){
+						//printf("yes i am on a falling block\n");
+						//fallme(i,j);
+						if(blocks[i][j].a.y>-3){
+							robo._centery-=0.5;
+							blocks[i][j].a.y-=0.5;
+							blocks[i][j].b.y-=0.5;
+							blocks[i][j].c.y-=0.5;
+							blocks[i][j].d.y-=0.5;
+							blocks[i][j].e.y-=0.5;
+							blocks[i][j].f.y-=0.5;
+							blocks[i][j].g.y-=0.5;
+							blocks[i][j].h.y-=0.5;
+						}
+					}
+				}
+				
+				int flag=0;//tells whether the robot is no longer on a teleporting tile
+				for(k=0;k<_noofteleportor;k++){
+					if(_teleportorblocks[2*k]==i && _teleportorblocks[2*k+1]==j){
+						flag=1;//i am on a teloportor tile
+						if(robo._icanteleport==1){
+							int gototile=((k+1)%_noofteleportor);
+							robo._centerx=(blocks[_teleportorblocks[2*gototile]][_teleportorblocks[2*gototile+1]].a.x+blocks[_teleportorblocks[2*gototile]][_teleportorblocks[2*gototile+1]].b.x)/2.0;
+							robo._centerz=(blocks[_teleportorblocks[2*gototile]][_teleportorblocks[2*gototile+1]].a.z+blocks[_teleportorblocks[2*gototile]][_teleportorblocks[2*gototile+1]].d.z)/2.0;
+							printf("%f %f\n",robo._centerx,robo._centerz);
+							robo._icanteleport=0;
+						}
+					}
+				}
+				if(flag==0){
+					robo._icanteleport=1;
+				}
+				
+			}		
+			else if((blocks[i][j].e.y>robo._centery+robo._radface*6+robo._radface/4)){//the tile is very high than the robot then the robot should fall... let him be on any tile at all
+				robo._centery-=0.5;
+			}
+			else if((blocks[i][j].a.y + robo._radface*4) < robo._centery){
+				//printf("radface=%f\n",robo._radface*4);
+				//printf("************%f %f\n",blocks[i][j].a.y,robo._centery-robo._radface*4);
+				//this is a very important part.... careful... remember...
+				_diecount++;
+				robo._centery-=0.6;
+				if(robo._centery < blocks[i][j].a.y+robo._radface*4){
+					robo._centery=blocks[i][j].a.y+robo._radface*4;
+					_diecount=0;
+				}
+				if(_diecount==20){
+					printf("you are dead\n");
+				}
+				iftrampoline();
+			}
+			else{
+				//robo._centery=blocks[i][j].a.y+robo._radface*4;//very dangerous line.... can destroy the code
+				if(robo._centery-4*robo._radface<blocks[i][j].a.y && robo._centery-4*robo._radface>blocks[i][j].e.y){
+					robo._centery=blocks[i][j].a.y+4*robo._radface;
+					iftrampoline();
+				}
+				else{
+					robo._centery=blocks[i][j].e.y-(robo._radface*6+robo._radface/4);
+					robo._centery-=0.5;
+				}
+			}		
+		}	
+		
+		for(k=0;k<_noofmovingy;k++){	
+			if(_movingblocks[2*k]==i && _movingblocks[2*k+1]==j){
+				//printf("i=%d j=%d \n",i,j);
+				//printf("%f %f\n",robo._centery,blocks[i][j].a.y+robo._radface*4);
+				if(robo._centery==blocks[i][j].a.y+robo._radface*4){
+					if(_movingblocks[4*i+1]==j){
+						if(_updown[2*i]==0){
+							if((blocks[i][j].a.y)<_distance[2*i]){
+								inc=0.5;
+							}
+							else{
+								inc=-0.5;
+							}
+						}
+						else if(_updown[2*i]==1){
+							if((blocks[i][j].a.y)>-_distance[2*i]){
+								inc=-0.5;
+							}
+							else{
+								inc=0.5;
+							}
+						}
+					}
+					else if(_movingblocks[4*i+3]==j){
+						if(_updown[2*i+1]==0){
+							if((blocks[i][j].a.y)<_distance[2*i+1]){
+								inc=0.5;
+							}
+							else{
+								inc=-0.5;
+							}
+						}
+						else if(_updown[2*i+1]==1){
+							if((blocks[i][j].a.y)>-_distance[2*i+1]){
+								inc=-0.5;
+							}
+							else{
+								inc=0.5;
+							}
+						}
+					}
+					_checkflag=1;
+					break;
+				}
+				else if(robo._centery<blocks[i][j].a.y+robo._radface*4){
+					_checkflag=0;
+				}
+				else{
+					_checkflag=0;
+				}
+			}
+			else{
+				_checkflag=0;
+			}
+		}
+	}
+}
+
+void update(int value) {
+	if(robo._centery<-30){
+		printf("you are dead\n");
+		exit(0);
+	}
+	else{
+		whereisbot();
+		glutPostRedisplay();
+		glutTimerFunc(50, update, 0);
+	}
+}
